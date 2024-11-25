@@ -8,7 +8,7 @@ NC='\033[0m'
 LOG_FILE="redm_install.log"
 BACKUP_DIR="backups"
 MAX_BACKUPS=5
-MIN_DISK_SPACE=5
+MIN_DISK_SPACE=10
 
 log() {
     local message="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
@@ -193,21 +193,21 @@ EOL
         FIVEM_VERSION="latest"
     fi
 
-    cat > .env << "EOL"
-MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-MYSQL_DATABASE=${MYSQL_DATABASE}
-MYSQL_USER=${MYSQL_USER}
-MYSQL_PASSWORD=${MYSQL_PASSWORD}
-TIMEZONE=${TIMEZONE}
-FIVEM_VERSION=${FIVEM_VERSION}
+    cat > .env << EOL
+MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD
+MYSQL_DATABASE=$MYSQL_DATABASE
+MYSQL_USER=$MYSQL_USER
+MYSQL_PASSWORD=$MYSQL_PASSWORD
+TIMEZONE=$TIMEZONE
+FIVEM_VERSION=$FIVEM_VERSION
 EOL
 
-    cat > docker-compose.yml << "EOL"
+    cat > docker-compose.yml << EOL
 version: "3.9"
 
 services:
     redm:
-        image: spritsail/fivem:${FIVEM_VERSION}
+        image: spritsail/fivem:$FIVEM_VERSION
         container_name: redm
         environment:
             - NO_LICENSE_KEY=1
@@ -233,11 +233,11 @@ services:
         environment:
             - PUID=0
             - PGID=0
-            - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-            - TZ=${TIMEZONE}
-            - MYSQL_DATABASE=${MYSQL_DATABASE}
-            - MYSQL_USER=${MYSQL_USER}
-            - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+            - MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD
+            - TZ=$TIMEZONE
+            - MYSQL_DATABASE=$MYSQL_DATABASE
+            - MYSQL_USER=$MYSQL_USER
+            - MYSQL_PASSWORD=$MYSQL_PASSWORD
         command: --sql_mode=NO_ZERO_IN_DATE,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION
         ports:
             - 3306:3306
@@ -258,10 +258,10 @@ services:
 EOL
 
     mkdir -p config
-    cat > config/server.cfg << "EOL"
+    cat > config/server.cfg << EOL
 endpoint_add_tcp "0.0.0.0:30120"
 endpoint_add_udp "0.0.0.0:30120"
-set mysql_connection_string "mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@redm_db/${MYSQL_DATABASE}?charset=utf8mb4"
+set mysql_connection_string "mysql://$MYSQL_USER:$MYSQL_PASSWORD@redm_db/$MYSQL_DATABASE?charset=utf8mb4"
 EOL
 
     configure_firewall
