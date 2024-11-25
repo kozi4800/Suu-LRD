@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Colors and logging setup
+# Colors and logging
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -8,7 +8,7 @@ NC='\033[0m'
 LOG_FILE="redm_install.log"
 BACKUP_DIR="backups"
 MAX_BACKUPS=5
-MIN_DISK_SPACE=10 #GB
+MIN_DISK_SPACE=10
 
 log() {
     local message="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
@@ -37,8 +37,8 @@ configure_firewall() {
     read -p "Do you want to restrict MariaDB and phpMyAdmin access to specific IPs? (y/n): " restrict_access
     if [ "$restrict_access" = "y" ]; then
         read -p "Enter allowed IP address: " allowed_ip
-        ufw allow from $allowed_ip to any port 3306
-        ufw allow from $allowed_ip to any port 8080
+        ufw allow from "$allowed_ip" to any port 3306
+        ufw allow from "$allowed_ip" to any port 8080
     else
         ufw allow 3306/tcp
         ufw allow 8080/tcp
@@ -48,14 +48,14 @@ configure_firewall() {
 }
 
 monitor_resources() {
-    local container_name=$1
-    docker stats --no-stream $container_name | tee -a "$LOG_FILE"
+    docker stats --no-stream "$1" | tee -a "$LOG_FILE"
 }
 
 rotate_backups() {
-    local backup_count=$(ls -1 "$BACKUP_DIR"/*.tar.gz 2>/dev/null | wc -l)
+    local backup_count
+    backup_count=$(ls -1 "$BACKUP_DIR"/*.tar.gz 2>/dev/null | wc -l)
     if [ "$backup_count" -gt "$MAX_BACKUPS" ]; then
-        ls -t "$BACKUP_DIR"/*.tar.gz | tail -n +$((MAX_BACKUPS+1)) | xargs rm
+        ls -t "$BACKUP_DIR"/*.tar.gz | tail -n +"$((MAX_BACKUPS+1))" | xargs rm
         log "Removed old backups, keeping latest $MAX_BACKUPS"
     fi
 }
@@ -69,16 +69,15 @@ backup_data() {
 }
 
 restore_backup() {
-    local backup_file=$1
-    log "Restoring from backup: $backup_file"
+    log "Restoring from backup: $1"
     docker-compose down
-    tar -xzf $backup_file
+    tar -xzf "$1"
     docker-compose up -d
 }
 
 validate_input() {
-    local var_name=$1
-    local var_value=$2
+    local var_name="$1"
+    local var_value="$2"
     
     case $var_name in
         "MYSQL_ROOT_PASSWORD"|"MYSQL_PASSWORD")
@@ -110,16 +109,13 @@ start_server() {
 }
 
 install_server() {
-    # Check OS
     if ! [[ -f /etc/debian_version ]]; then
         log "${RED}This script requires Debian/Ubuntu${NC}"
         exit 1
     }
 
-    # Check disk space
     check_disk_space || exit 1
 
-    # Load environment variables if .env exists
     if [ -f .env ]; then
         source .env
     else
@@ -134,7 +130,6 @@ EOL
         log "${GREEN}.env file created with default values${NC}"
     fi
 
-    # Install Docker and Docker Compose
     log "Installing Docker..."
     apt-get update
     apt-get install -y docker.io
@@ -142,7 +137,6 @@ EOL
     log "Installing Docker Compose..."
     apt-get install -y docker-compose
 
-    # Configure variables if not in .env
     if [ -z "$MYSQL_ROOT_PASSWORD" ]; then
         while true; do
             read -s -p "Enter root password for MariaDB: " MYSQL_ROOT_PASSWORD
@@ -199,7 +193,6 @@ EOL
         FIVEM_VERSION="latest"
     fi
 
-    # Save to .env
     cat > .env << EOL
 MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD
 MYSQL_DATABASE=$MYSQL_DATABASE
@@ -209,13 +202,12 @@ TIMEZONE=$TIMEZONE
 FIVEM_VERSION=$FIVEM_VERSION
 EOL
 
-    # Create docker-compose.yml
     cat > docker-compose.yml << EOL
 version: "3.9"
 
 services:
     redm:
-        image: spritsail/fivem:${FIVEM_VERSION}
+        image: spritsail/fivem:\${FIVEM_VERSION}
         container_name: redm
         environment:
             - NO_LICENSE_KEY=1
@@ -241,11 +233,11 @@ services:
         environment:
             - PUID=0
             - PGID=0
-            - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-            - TZ=${TIMEZONE}
-            - MYSQL_DATABASE=${MYSQL_DATABASE}
-            - MYSQL_USER=${MYSQL_USER}
-            - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+            - MYSQL_ROOT_PASSWORD=\${MYSQL_ROOT_PASSWORD}
+            - TZ=\${TIMEZONE}
+            - MYSQL_DATABASE=\${MYSQL_DATABASE}
+            - MYSQL_USER=\${MYSQL_USER}
+            - MYSQL_PASSWORD=\${MYSQL_PASSWORD}
         command: --sql_mode=NO_ZERO_IN_DATE,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION
         ports:
             - 3306:3306
@@ -265,13 +257,11 @@ services:
             - redm_db
 EOL
 
-    # Create basic server.cfg
     mkdir -p config
     cat > config/server.cfg << EOL
-# Basic server configuration
 endpoint_add_tcp "0.0.0.0:30120"
 endpoint_add_udp "0.0.0.0:30120"
-set mysql_connection_string "mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@redm_db/${MYSQL_DATABASE}?charset=utf8mb4"
+set mysql_connection_string "mysql://\${MYSQL_USER}:\${MYSQL_PASSWORD}@redm_db/\${MYSQL_DATABASE}?charset=utf8mb4"
 EOL
 
     configure_firewall
@@ -282,8 +272,8 @@ EOL
         read -p "Do you want to restore from the last backup? (y/n): " restore_choice
         if [ "$restore_choice" = "y" ]; then
             latest_backup=$(ls -t backups/*.tar.gz 2>/dev/null | head -1)
-            if [ ! -z "$latest_backup" ]; then
-                restore_backup $latest_backup
+            if [ -n "$latest_backup" ]; then
+                restore_backup "$latest_backup"
             else
                 log "${RED}No backup found${NC}"
             fi
@@ -334,13 +324,11 @@ show_menu() {
     done
 }
 
-# Check root privileges
 if [[ $EUID -ne 0 ]]; then
    log "${RED}This script must be run as root${NC}"
    exit 1
 fi
 
-# Start menu if script exists, otherwise install
 if [ -f "docker-compose.yml" ]; then
     show_menu
 else
