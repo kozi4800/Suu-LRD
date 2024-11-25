@@ -8,7 +8,7 @@ NC='\033[0m'
 LOG_FILE="redm_install.log"
 BACKUP_DIR="backups"
 MAX_BACKUPS=5
-MIN_DISK_SPACE=10
+MIN_DISK_SPACE=5
 
 log() {
     local message="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
